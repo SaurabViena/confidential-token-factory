@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useParams } from "next/navigation";
 import { useAccount, useReadContract, useReadContracts, useWriteContract } from "wagmi";
-import { ConfidentialMintableTokenABI, PublicMintableTokenABI, TokenFactoryABI } from "@/config/abi";
+import { ConfidentialMintableTokenABI, TokenFactoryABI } from "@/config/abi";
 
 function StatRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -42,8 +42,6 @@ export default function TokenDetailPage() {
   const cIsPublicTotal = useReadContract({ abi: ConfidentialMintableTokenABI as unknown as import("viem").Abi, address, functionName: "isTotalSupplyPublic" });
   const cTotalMinted = useReadContract({ abi: ConfidentialMintableTokenABI as unknown as import("viem").Abi, address, functionName: "totalMinted" });
   const cCreator = useReadContract({ abi: ConfidentialMintableTokenABI as unknown as import("viem").Abi, address, functionName: "creator" });
-
-  const pTotalSupply = useReadContract({ abi: PublicMintableTokenABI as unknown as import("viem").Abi, address, functionName: "totalSupply" });
   const cPublicEnabled = useReadContract({ abi: ConfidentialMintableTokenABI as unknown as import("viem").Abi, address, functionName: "publicMintEnabled" });
 
   const countRes = useReadContract({
@@ -77,13 +75,13 @@ export default function TokenDetailPage() {
   const gateway = process.env.NEXT_PUBLIC_PINATA_GATEWAY || "";
 
   const progressPct = useMemo(() => {
-    const minted = (typeof cTotalMinted.data === "bigint" ? cTotalMinted.data : typeof pTotalSupply.data === "bigint" ? pTotalSupply.data : undefined);
+    const minted = cTotalMinted.data as bigint | undefined;
     const max = cMax.data as bigint | undefined;
     if (typeof minted === "bigint" && typeof max === "bigint" && max > BigInt(0)) {
       return Math.max(0, Math.min(100, Number(minted) / Number(max) * 100));
     }
     return undefined;
-  }, [cTotalMinted.data, pTotalSupply.data, cMax.data]);
+  }, [cTotalMinted.data, cMax.data]);
 
   const iconUrl = useMemo(() => {
     const cid = (cIcon.data as string) || "";
@@ -117,7 +115,6 @@ export default function TokenDetailPage() {
       });
       showToast("Transaction sent: " + String(hash).slice(0, 10) + "…");
       cTotalMinted.refetch?.();
-      pTotalSupply.refetch?.();
     } catch (err) {
       const msg = (err as Error)?.message || "Submission failed";
       showToast(msg);
