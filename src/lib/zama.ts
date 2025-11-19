@@ -1,3 +1,5 @@
+import { FHEVM_CONFIG } from "@/config/fhevm";
+
 type SepoliaConfigType = Record<string, unknown>;
 
 interface EIP1193RequestArgs {
@@ -19,6 +21,8 @@ interface ZamaRelayerSDKShape {
   initSDK: () => Promise<void>;
   createInstance: (config: SepoliaConfigType) => Promise<unknown>;
   SepoliaConfig: SepoliaConfigType;
+  // v0.9 additions
+  publicDecrypt?: (pairs: { handle: string; contractAddress: string }[], contractAddress: string, userAddress: string) => Promise<Record<string, unknown>>;
 }
 
 declare global {
@@ -36,7 +40,9 @@ export function initZamaRelayer(): Promise<unknown> {
     try {
       const isDev = process.env.NODE_ENV !== "production";
       if (isDev) {
-        console.groupCollapsed("Zama FHE Init");
+        console.groupCollapsed("Zama FHE Init (v0.9)");
+        console.info("SDK Version:", FHEVM_CONFIG.RELAYER_SDK_VERSION);
+        console.info("Gateway Address:", FHEVM_CONFIG.GATEWAY_ADDRESS);
         console.info("Global (fhevm) present:", Boolean(window.fhevm));
         console.info("Global (ZamaRelayerSDK) present:", Boolean(window.ZamaRelayerSDK));
         console.info("window.ethereum:", Boolean(window.ethereum));
@@ -59,7 +65,7 @@ export function initZamaRelayer(): Promise<unknown> {
       }
       const rpcUrl =
         (process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL && process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL.trim()) ||
-        "https://ethereum-sepolia.publicnode.com";
+        FHEVM_CONFIG.DEFAULT_RPC_URL;
       if (isDev) {
         console.info("Using RPC URL:", rpcUrl);
       }
@@ -72,7 +78,7 @@ export function initZamaRelayer(): Promise<unknown> {
           if (isDev) {
             console.info("Wallet detected chainId:", chainId);
           }
-          if (chainId !== 11155111) {
+          if (chainId !== FHEVM_CONFIG.CHAIN_ID) {
             if (isDev) console.warn("Wallet not on Sepolia (will use configured RPC)");
           }
         } catch (e) {
@@ -83,7 +89,7 @@ export function initZamaRelayer(): Promise<unknown> {
       if (isDev) {
         console.info("createInstance() starting, config:", config);
       }
-      const timeoutMs = 30000;
+      const timeoutMs = FHEVM_CONFIG.CREATE_INSTANCE_TIMEOUT_MS;
       const inst = await Promise.race([
         createInstance(config),
         new Promise((_, rejectRace) =>
@@ -105,6 +111,10 @@ export function initZamaRelayer(): Promise<unknown> {
 
 export async function getZamaInstance(): Promise<unknown> {
   return initZamaRelayer();
+}
+
+export function getGatewayAddress(): string {
+  return FHEVM_CONFIG.GATEWAY_ADDRESS;
 }
 
 

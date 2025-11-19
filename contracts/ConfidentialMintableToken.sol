@@ -2,55 +2,53 @@
 pragma solidity ^0.8.27;
 
 import {FHE, euint64} from "@fhevm/solidity/lib/FHE.sol";
-import {SepoliaConfig} from "@fhevm/solidity/config/ZamaConfig.sol";
+import {ZamaEthereumConfig} from "@fhevm/solidity/config/ZamaConfig.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {
-    ConfidentialFungibleToken
-} from "openzeppelin-confidential-contracts/contracts/token/ConfidentialFungibleToken.sol";
+import {ERC7984} from "openzeppelin-confidential-contracts/contracts/token/ERC7984/ERC7984.sol";
 
 /// @title ConfidentialMintableToken
-/// @notice Publicly mintable confidential token based on OpenZeppelin Confidential (ERC-7984) + Zama FHEVM
-/// @dev Uses integer units (decimals=0) to simplify frontend interaction, supply and mint amounts in uint64
-contract ConfidentialMintableToken is SepoliaConfig, ConfidentialFungibleToken, AccessControl {
-    // --- Metadata & Configuration ---
-    string public description; // Optional description
-    string public iconCid; // IPFS CID for icon
+/// @notice 基于 OpenZeppelin Confidential (ERC-7984) + Zama FHEVM 的可公开铸造机密代币
+/// @dev 为简化前端交互，采用整数单位（decimals=0），供应与铸造额度以 uint64 计
+contract ConfidentialMintableToken is ZamaEthereumConfig, ERC7984, AccessControl {
+    // --- 元数据与配置 ---
+    string public description; // 可选描述
+    string public iconCid; // Icon 的 IPFS CID
 
-    address public creator; // Token creator
-    address public pendingCreator; // Two-step transfer
+    address public creator; // 代币创建者
+    address public pendingCreator; // 两步交接
     modifier onlyCreator() {
         require(msg.sender == creator, "not creator");
         _;
     }
 
-    uint64 public immutable maxSupply; // Maximum total supply
-    uint16 public immutable creatorReserveBps; // Creator reserve percentage (basis points, 10000=100%)
-    uint16 public immutable publicMintBps; // Public mint percentage (basis points)
-    uint64 public immutable perMintAmount; // Amount per single mint
-    uint32 public perWalletMintLimit; // Per-wallet mint limit, 0 means unlimited (governable)
+    uint64 public immutable maxSupply; // 总量上限
+    uint16 public immutable creatorReserveBps; // 创作者保留百分比（基点，10000=100%）
+    uint16 public immutable publicMintBps; // 面向用户的公开铸造百分比（基点）
+    uint64 public immutable perMintAmount; // 单次 mint 数量
+    uint32 public perWalletMintLimit; // 单钱包 mint 次数上限，0 表示不限制（可治理更新）
 
-    uint64 public immutable publicAllocation; // Total allocation for public mint
-    bool public immutable isTotalSupplyPublic; // Whether total minted is public (optional)
+    uint64 public immutable publicAllocation; // 用户可 mint 的总额度
+    bool public immutable isTotalSupplyPublic; // 是否公开 total minted（可选）
 
-    // --- Public Mint Governance ---
-    bool public publicMintEnabled = true; // Default enabled for backwards compatibility
-    uint64 public publicMintStart; // 0 means no start time restriction
-    uint64 public publicMintEnd; // 0 means no end time restriction
-    bytes32 public publicMintMerkleRoot; // 0 means no whitelist
+    // --- 公共铸造治理 ---
+    bool public publicMintEnabled = true; // 兼容旧逻辑，默认开启
+    uint64 public publicMintStart; // 0 表示不限开始时间
+    uint64 public publicMintEnd; // 0 表示不限结束时间
+    bytes32 public publicMintMerkleRoot; // 0 表示不启用白名单
 
-    // --- Operation Control & Blocklist ---
-    bool public paused; // Only restricts mint/burn/publicMint in this contract
+    // --- 运行控制与名单 ---
+    bool public paused; // 仅限制本合约内的 mint/burn/publicMint
     mapping(address => bool) public blocklisted;
 
-    // --- Metadata Governance ---
+    // --- 元数据治理 ---
     bool public metadataFrozen;
 
-    // --- State ---
-    uint64 private _totalMinted; // Total minted amount (tracking purpose)
-    uint64 private _publicMinted; // Public minted amount
-    mapping(address => uint32) public walletMintCount; // Mint count per wallet
+    // --- 状态 ---
+    uint64 private _totalMinted; // 总铸造量（追踪用途）
+    uint64 private _publicMinted; // 面向用户的已铸造量
+    mapping(address => uint32) public walletMintCount; // 每个地址 mint 次数
 
     event PublicMint(address indexed minter, uint64 amount);
     event CreatorTransferProposed(address indexed currentCreator, address indexed newCreator);
@@ -82,7 +80,7 @@ contract ConfidentialMintableToken is SepoliaConfig, ConfidentialFungibleToken, 
         address creator_,
         bool isTotalSupplyPublic_,
         bool renounceOnCreation_
-    ) ConfidentialFungibleToken(name_, symbol_, "") {
+    ) ERC7984(name_, symbol_, _buildTokenURI(iconCid_)) {
         require(maxSupply_ > 0, "maxSupply=0");
         require(maxSupply_ <= type(uint64).max, "supply>uint64");
         require(perMintAmount_ > 0, "perMint=0");
@@ -103,7 +101,7 @@ contract ConfidentialMintableToken is SepoliaConfig, ConfidentialFungibleToken, 
         uint64 allocation = uint64((uint256(maxSupply_) * publicMintBps_) / 10000);
         publicAllocation = allocation;
 
-        // Mint creator reserve
+        // 铸造创作者保留份额
         if (reserve > 0) {
             euint64 delta = FHE.asEuint64(reserve);
             _mint(creator_, delta);
@@ -115,12 +113,50 @@ contract ConfidentialMintableToken is SepoliaConfig, ConfidentialFungibleToken, 
         }
     }
 
-    /// @notice Integer units for easier frontend interaction with denominations like 100/500/1000
+    /// @notice 单位为整数，便于前端以 100/500/1000 等面额铸造
     function decimals() public pure override returns (uint8) {
         return 0;
     }
 
-    // --- Two-step Creator Transfer ---
+    /// @dev 重写 supportsInterface 以解决多重继承冲突
+    function supportsInterface(bytes4 interfaceId) public view virtual override(ERC7984, AccessControl) returns (bool) {
+        return super.supportsInterface(interfaceId);
+    }
+
+    /// @notice 获取代币的元数据 URI
+    function tokenURI() public view returns (string memory) {
+        return _buildTokenURI(iconCid);
+    }
+
+    /// @dev 构建代币 URI，支持 IPFS 和 HTTP 链接
+    function _buildTokenURI(string memory cid) internal pure returns (string memory) {
+        if (bytes(cid).length == 0) return "";
+        if (bytes(cid).length > 7 && _compareStrings(substring(cid, 0, 7), "ipfs://")) {
+            return cid;
+        }
+        if (
+            bytes(cid).length > 8 &&
+            (_compareStrings(substring(cid, 0, 8), "https://") || _compareStrings(substring(cid, 0, 7), "http://"))
+        ) {
+            return cid;
+        }
+        return string(abi.encodePacked("ipfs://", cid));
+    }
+
+    function substring(string memory str, uint start, uint end) internal pure returns (string memory) {
+        bytes memory strBytes = bytes(str);
+        bytes memory result = new bytes(end - start);
+        for (uint i = start; i < end; i++) {
+            result[i - start] = strBytes[i];
+        }
+        return string(result);
+    }
+
+    function _compareStrings(string memory a, string memory b) internal pure returns (bool) {
+        return keccak256(abi.encodePacked(a)) == keccak256(abi.encodePacked(b));
+    }
+
+    // --- 两步交接创建者 ---
     function proposeCreator(address newCreator) external onlyCreator {
         require(newCreator != address(0), "zero addr");
         pendingCreator = newCreator;
@@ -151,7 +187,7 @@ contract ConfidentialMintableToken is SepoliaConfig, ConfidentialFungibleToken, 
         emit GovernanceRenounced(prev, atCreation);
     }
 
-    // --- Operation Control ---
+    // --- 运行控制 ---
     function pause() external {
         require(msg.sender == creator || hasRole(DEFAULT_ADMIN_ROLE, msg.sender), "no pause role");
         paused = true;
@@ -184,7 +220,7 @@ contract ConfidentialMintableToken is SepoliaConfig, ConfidentialFungibleToken, 
         emit PublicMintGovernanceUpdated(enabled, start, end, perWalletLimit, merkleRoot);
     }
 
-    // --- Metadata Governance ---
+    // --- 元数据治理 ---
     function updateMetadata(string calldata newDescription, string calldata newIconCid) external onlyCreator {
         require(!metadataFrozen, "frozen");
         description = newDescription;
@@ -197,13 +233,13 @@ contract ConfidentialMintableToken is SepoliaConfig, ConfidentialFungibleToken, 
         emit MetadataFrozen();
     }
 
-    /// @notice Public mint fixed amount, subject to total allocation and per-wallet limit
+    /// @notice 用户公开 mint 固定数量，受总额度与单钱包次数限制
     function publicMint() external {
         bytes32[] memory empty;
         _publicMintWithProof(empty);
     }
 
-    /// @notice Public mint with whitelist proof (optional)
+    /// @notice 启用白名单证明的公开 mint（可选）
     function publicMint(bytes32[] calldata merkleProof) external {
         _publicMintWithProof(merkleProof);
     }
@@ -239,7 +275,7 @@ contract ConfidentialMintableToken is SepoliaConfig, ConfidentialFungibleToken, 
         emit PublicMint(msg.sender, perMintAmount);
     }
 
-    /// @notice Creator mint (subject to maxSupply limit)
+    /// @notice 创作者增发（受 maxSupply 限制）
     function mint(address to, uint64 amount) external onlyCreator {
         require(!paused, "paused");
         require(!blocklisted[to], "blocklisted");
@@ -250,7 +286,7 @@ contract ConfidentialMintableToken is SepoliaConfig, ConfidentialFungibleToken, 
         _totalMinted += amount;
     }
 
-    /// @notice Creator burn
+    /// @notice 创作者销毁
     function burn(address from, uint64 amount) external onlyCreator {
         require(!paused, "paused");
         require(!blocklisted[from], "blocklisted");
@@ -263,7 +299,7 @@ contract ConfidentialMintableToken is SepoliaConfig, ConfidentialFungibleToken, 
         }
     }
 
-    /// @notice Brief configuration info for one-time frontend read
+    /// @notice 简要配置信息，便于前端一次性读取
     function getConfig()
         external
         view
@@ -296,7 +332,7 @@ contract ConfidentialMintableToken is SepoliaConfig, ConfidentialFungibleToken, 
         publicMinted_ = _publicMinted;
     }
 
-    /// @notice Total supply visibility set at construction; only creator can view if not public
+    /// @notice 总量是否公开由构造时设定；未公开时仅创作者可读
     function totalMinted() external view returns (uint64) {
         if (!isTotalSupplyPublic) require(msg.sender == creator, "no view perm");
         return _totalMinted;
@@ -307,12 +343,12 @@ contract ConfidentialMintableToken is SepoliaConfig, ConfidentialFungibleToken, 
         return _publicMinted;
     }
 
-    /// @notice Returns only whether sold out/capped (without revealing specific values)
+    /// @notice 仅返回是否售罄/触顶（不泄露具体数值）
     function isSoldOut() external view returns (bool) {
         return _publicMinted >= publicAllocation || _totalMinted >= maxSupply;
     }
 
-    /// @notice Asset rescue (admin only)
+    /// @notice 资产救援（管理员）
     function rescueETH(address payable to, uint256 amount) external onlyCreator {
         require(to != address(0), "zero addr");
         (bool ok, ) = to.call{value: amount}("");

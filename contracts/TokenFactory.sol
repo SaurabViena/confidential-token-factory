@@ -4,7 +4,7 @@ pragma solidity ^0.8.27;
 import {ConfidentialMintableToken} from "./ConfidentialMintableToken.sol";
 
 /// @title TokenFactory
-/// @notice Confidential token factory based on OZ ERC7984 + FHEVM
+/// @notice 仅创建基于 OZ ERC7984 + FHEVM 的机密代币
 contract TokenFactory {
     struct TokenInfo {
         address token;

@@ -1,10 +1,10 @@
-# Zama Token Factory
+# Confidential Token Factory
 
 A zero-barrier decentralized application (dApp) that enables anyone to create and manage confidential tokens using Zama's FHEVM technology.
 
 ## Overview
 
-Zama Token Factory is a contract factory and frontend interface that simplifies the creation of privacy-preserving ERC-7984 compliant confidential tokens. Built on Zama's Fully Homomorphic Encryption Virtual Machine (FHEVM), it allows users to deploy tokens with encrypted balances while maintaining full functionality of traditional fungible tokens.
+Confidential Token Factory is a contract factory and frontend interface that simplifies the creation of privacy-preserving ERC-7984 compliant confidential tokens. Built on Zama's Fully Homomorphic Encryption Virtual Machine (FHEVM), it allows users to deploy tokens with encrypted balances while maintaining full functionality of traditional fungible tokens.
 
 ## Key Features
 

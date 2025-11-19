@@ -66,6 +66,7 @@ export default function DashboardPage() {
   const [balances, setBalances] = useState<Record<string, string>>({});
   const [toMap, setToMap] = useState<Record<string, string>>({});
   const [amountMap, setAmountMap] = useState<Record<string, string>>({});
+  const [selectedTokenAddress, setSelectedTokenAddress] = useState<string>("");
 
   const addNotice = (n: Notice) => {
     setNotices((prev) => [n, ...prev]);
@@ -82,10 +83,10 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!mounted) return;
-    // Keep loading state until address is obtained and request is complete
     if (!address) {
       setLoading(true);
       setTokens([]);
+      setSelectedTokenAddress("");
       return;
     }
 
@@ -172,6 +173,9 @@ export default function DashboardPage() {
           }
         }
         setTokens(allTokens);
+        if (allTokens.length > 0 && !selectedTokenAddress) {
+          setSelectedTokenAddress(allTokens[0].token);
+        }
       } catch (error) {
         console.error("Failed to load tokens:", error);
       } finally {
@@ -180,7 +184,7 @@ export default function DashboardPage() {
     };
 
     fetchTokens();
-  }, [address, mounted]);
+  }, [address, mounted, selectedTokenAddress]);
 
   const onQueryBalance = useMemo(() => {
     return (tokenAddress: string) => {
@@ -375,103 +379,160 @@ export default function DashboardPage() {
             <p className="mt-1 text-xs text-foreground/50">Tokens you create or hold will appear here</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {tokens.map((token) => (
-              <div
-                key={token.token}
-                className="group block rounded-lg border border-white/10 bg-foreground/[0.03] p-5 transition-all hover:bg-foreground/[0.05] hover:border-white/15"
+          <div className="max-w-2xl mx-auto">
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-foreground/80 mb-2">Select Token</label>
+              <select
+                value={selectedTokenAddress}
+                onChange={(e) => setSelectedTokenAddress(e.target.value)}
+                className="w-full rounded-lg border border-foreground/15 bg-foreground/[0.03] px-4 py-3 text-sm outline-none focus:border-sky-400 transition-colors"
               >
-                <div className="flex items-start gap-4">
-                  {token.iconCid ? (
-                    <Image
-                      src={`https://${process.env.NEXT_PUBLIC_PINATA_GATEWAY}/ipfs/${token.iconCid}`}
-                      alt={token.name}
-                      width={48}
-                      height={48}
-                      className="h-12 w-12 flex-shrink-0 rounded-full object-cover"
-                    />
-                  ) : (
-                    <div className="h-12 w-12 flex-shrink-0 rounded-full bg-gradient-to-br from-sky-400 to-blue-500 flex items-center justify-center text-white font-semibold text-lg">
-                      {token.name.charAt(0)}
+                {tokens.map((token) => (
+                  <option key={token.token} value={token.token}>
+                    {token.name} ({token.symbol})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {(() => {
+              const token = tokens.find((t) => t.token === selectedTokenAddress);
+              if (!token) return null;
+
+              return (
+                <div className="rounded-xl border border-white/10 bg-foreground/[0.03] p-5">
+                  <div className="flex items-start gap-4 mb-4">
+                    {token.iconCid ? (
+                      <Image
+                        src={`https://${process.env.NEXT_PUBLIC_PINATA_GATEWAY}/ipfs/${token.iconCid}`}
+                        alt={token.name}
+                        width={56}
+                        height={56}
+                        className="h-14 w-14 flex-shrink-0 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="h-14 w-14 flex-shrink-0 rounded-full bg-gradient-to-br from-sky-400 to-blue-500 flex items-center justify-center text-white font-bold text-xl">
+                        {token.name.charAt(0)}
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <h2 className="text-xl font-bold mb-0.5">{token.name}</h2>
+                      <p className="text-sm text-foreground/60 mb-2">{token.symbol}</p>
+                      {token.description && (
+                        <p className="text-xs text-foreground/70 line-clamp-2">{token.description}</p>
+                      )}
                     </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-base font-semibold truncate">{token.name}</h3>
-                    <p className="text-sm text-foreground/60">{token.symbol}</p>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-4">
+                    <div className="rounded-lg border border-foreground/10 bg-foreground/5 p-3">
+                      <div className="text-xs text-foreground/50 mb-0.5">Max Supply</div>
+                      <div className="text-sm font-semibold">{token.maxSupply.toString()}</div>
+                    </div>
+                    <div className="rounded-lg border border-foreground/10 bg-foreground/5 p-3">
+                      <div className="text-xs text-foreground/50 mb-0.5">Public Allocation</div>
+                      <div className="text-sm font-semibold">{token.publicAllocation.toString()}</div>
+                    </div>
+                    <div className="rounded-lg border border-foreground/10 bg-foreground/5 p-3">
+                      <div className="text-xs text-foreground/50 mb-0.5">Creator Reserve</div>
+                      <div className="text-sm font-semibold">{token.creatorReserveBps / 100}%</div>
+                    </div>
+                    <div className="rounded-lg border border-foreground/10 bg-foreground/5 p-3">
+                      <div className="text-xs text-foreground/50 mb-0.5">Public Mint</div>
+                      <div className="text-sm font-semibold">{token.publicMintBps / 100}%</div>
+                    </div>
+                    <div className="rounded-lg border border-foreground/10 bg-foreground/5 p-3">
+                      <div className="text-xs text-foreground/50 mb-0.5">Per Mint</div>
+                      <div className="text-sm font-semibold">{token.perMintAmount.toString()}</div>
+                    </div>
+                    <div className="rounded-lg border border-foreground/10 bg-foreground/5 p-3">
+                      <div className="text-xs text-foreground/50 mb-0.5">Wallet Limit</div>
+                      <div className="text-sm font-semibold">{token.perWalletMintLimit}</div>
+                    </div>
+                    <div className="col-span-2 rounded-lg border border-foreground/10 bg-foreground/5 p-3">
+                      <div className="text-xs text-foreground/50 mb-1">Contract Address</div>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(token.token);
+                          const notice: Notice = {
+                            id: Date.now().toString(),
+                            type: "success",
+                            title: "Contract address copied",
+                          };
+                          setNotices((prev) => [...prev, notice]);
+                          setTimeout(() => {
+                            setNotices((prev) => prev.filter((n) => n.id !== notice.id));
+                          }, 2000);
+                        }}
+                        className="flex items-center gap-2 text-xs font-mono hover:text-sky-500 transition-colors group"
+                        title={token.token}
+                      >
+                        <span>{token.token.slice(0, 10)}...{token.token.slice(-8)}</span>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-50 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-xs font-medium text-foreground/80">Balance</div>
+                        <button
+                          onClick={() => onQueryBalance(token.token)}
+                          disabled={pending[token.token]}
+                          className="inline-flex items-center gap-1.5 rounded-md bg-sky-500 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-sky-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {pending[token.token] ? "Querying..." : "Query"}
+                        </button>
+                      </div>
+                      <div className="rounded-lg border border-foreground/15 bg-foreground/5 px-3 py-2 text-sm text-foreground/80">
+                        {balances[token.token] ?? "Not queried"}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col justify-end">
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href={`/token/${token.token}`}
+                          className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-xs font-medium border border-foreground/15 bg-foreground/5 text-foreground transition-colors hover:bg-foreground/10"
+                        >
+                          View Details
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-foreground/10 pt-4">
+                    <h3 className="text-xs font-medium text-foreground/80 mb-3">Send Tokens</h3>
+                    <div className="grid md:grid-cols-3 gap-2">
+                      <input
+                        value={toMap[token.token] ?? ""}
+                        onChange={(e) => setToMap((m) => ({ ...m, [token.token]: e.target.value }))}
+                        placeholder="Recipient Address 0x..."
+                        className="md:col-span-2 w-full rounded-lg border border-foreground/15 bg-foreground/[0.03] px-3 py-2 text-xs outline-none focus:border-sky-400 transition-colors"
+                      />
+                      <input
+                        value={amountMap[token.token] ?? ""}
+                        onChange={(e) => setAmountMap((m) => ({ ...m, [token.token]: e.target.value }))}
+                        placeholder="Amount"
+                        inputMode="numeric"
+                        className="w-full rounded-lg border border-foreground/15 bg-foreground/[0.03] px-3 py-2 text-xs outline-none focus:border-sky-400 transition-colors"
+                      />
+                      <button
+                        onClick={() => onSend(token.token)}
+                        disabled={sendPending[token.token]}
+                        className="md:col-span-3 inline-flex items-center justify-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {sendPending[token.token] ? "Sending..." : "Send Tokens"}
+                      </button>
+                    </div>
                   </div>
                 </div>
-                {token.description && (
-                  <p className="mt-3 text-sm text-foreground/70 line-clamp-2">{token.description}</p>
-                )}
-                <div className="mt-4 flex items-center justify-between text-xs text-foreground/50">
-                  <span>Max Supply: {token.maxSupply.toString()}</span>
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(token.token);
-                      const notice: Notice = {
-                        id: Date.now().toString(),
-                        type: "success",
-                        title: "Contract address copied",
-                      };
-                      setNotices((prev) => [...prev, notice]);
-                      setTimeout(() => {
-                        setNotices((prev) => prev.filter((n) => n.id !== notice.id));
-                      }, 2000);
-                    }}
-                    className="flex items-center gap-1 truncate ml-2 hover:text-foreground/80 transition-colors group"
-                    title={token.token}
-                  >
-                    <span>{token.token.slice(0, 6)}...{token.token.slice(-4)}</span>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                    </svg>
-                  </button>
-                </div>
-                <div className="mt-4 flex items-center justify-between gap-3">
-                  <div className="flex-1 rounded-md border border-foreground/15 bg-foreground/5 px-3 py-2 text-xs text-foreground/80">
-                    Balance: {balances[token.token] ?? "Not queried"}
-                  </div>
-                  <button
-                    onClick={() => onQueryBalance(token.token)}
-                    disabled={pending[token.token]}
-                    className="inline-flex items-center gap-2 rounded-md bg-sky-500 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-sky-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {pending[token.token] ? "Querying..." : "Query Balance"}
-                  </button>
-                </div>
-                <div className="mt-3 grid grid-cols-1 gap-2">
-                  <input
-                    value={toMap[token.token] ?? ""}
-                    onChange={(e) => setToMap((m) => ({ ...m, [token.token]: e.target.value }))}
-                    placeholder="Recipient Address 0x..."
-                    className="w-full rounded-md border border-foreground/15 bg-foreground/[0.03] px-3 py-2 text-xs outline-none focus:border-sky-400 transition-colors"
-                  />
-                  <input
-                    value={amountMap[token.token] ?? ""}
-                    onChange={(e) => setAmountMap((m) => ({ ...m, [token.token]: e.target.value }))}
-                    placeholder="Amount"
-                    inputMode="numeric"
-                    className="w-full rounded-md border border-foreground/15 bg-foreground/[0.03] px-3 py-2 text-xs outline-none focus:border-sky-400 transition-colors"
-                  />
-                  <div className="flex items-center justify-between">
-                    <Link
-                      href={`/token/${token.token}`}
-                      className="inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium border border-foreground/15 bg-foreground/5 text-foreground transition-colors hover:bg-foreground/10"
-                    >
-                      Details
-                    </Link>
-                    <button
-                      onClick={() => onSend(token.token)}
-                      disabled={sendPending[token.token]}
-                      className="inline-flex items-center gap-2 rounded-md bg-sky-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {sendPending[token.token] ? "Sending..." : "Send"}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
+              );
+            })()}
           </div>
         )}
       </div>

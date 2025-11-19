@@ -43,6 +43,7 @@ const connectors = connectorsForWallets(
 export const wagmiConfig = createConfig({
   connectors,
   chains: [sepolia],
+  batch: { multicall: true },
   transports: {
     [sepolia.id]: (() => {
       const rpc = (process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL || "").trim();
